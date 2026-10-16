@@ -17,7 +17,7 @@ export default function Navbar({ cartCount, onCartOpen }: NavbarProps) {
 
         {/* Nav links */}
         <div className="hidden md:flex items-center gap-8">
-          {['Releases', 'Artists', 'Free', 'Support', 'About'].map(link => (
+          {['Releases', 'Studio', 'Artists', 'Free', 'Support', 'About'].map(link => (
             <a key={link} href={`#${link.toLowerCase()}`} className="nav-link">{link}</a>
           ))}
         </div>

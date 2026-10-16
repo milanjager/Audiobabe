@@ -3,6 +3,7 @@ import PromoBar from './components/PromoBar';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import ReleasesGrid from './components/ReleasesGrid';
+import Creator from './components/Creator';
 import Testimonials from './components/Testimonials';
 import Press from './components/Press';
 import About from './components/About';
@@ -42,6 +43,7 @@ export default function App() {
       <main>
         <Hero onAddToCart={addToCart} />
         <ReleasesGrid releases={releases} onAddToCart={addToCart} />
+        <Creator />
         <Testimonials testimonials={testimonials} />
         <Press items={pressItems} />
         <About />
