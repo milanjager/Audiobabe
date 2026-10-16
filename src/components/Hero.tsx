@@ -1,100 +1,77 @@
-import { ChevronDown, Zap } from 'lucide-react';
+import { releases } from '../data/releases';
 
 interface HeroProps {
-  onNavigate: (section: string) => void;
+  onAddToCart: (id: string) => void;
 }
 
-export default function Hero({ onNavigate }: HeroProps) {
-  const bars = Array.from({ length: 24 }, (_, i) => i);
+export default function Hero({ onAddToCart }: HeroProps) {
+  const featured = releases[1]; // VOID PROTOCOL
 
   return (
-    <section className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden grid-bg" id="hero">
-      {/* Background noise overlay */}
-      <div className="absolute inset-0 opacity-5" style={{
-        backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")',
-        backgroundRepeat: 'repeat',
-        backgroundSize: '200px'
-      }} />
-
-      {/* Animated visualizer bars */}
-      <div className="absolute bottom-20 left-0 right-0 flex items-end justify-center gap-1 opacity-20 pointer-events-none">
-        {bars.map((i) => (
-          <div
-            key={i}
-            className="animate-pulse-bar"
-            style={{
-              width: '8px',
-              background: 'var(--accent)',
-              height: `${20 + Math.sin(i * 0.8) * 40 + 40}px`,
-              animationDelay: `${i * 0.06}s`,
-              animationDuration: `${0.6 + Math.sin(i) * 0.3}s`,
-            }}
-          />
-        ))}
-      </div>
-
-      <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
-        <div className="flex items-center justify-center gap-2 mb-6">
-          <Zap size={14} style={{ color: 'var(--accent)' }} />
-          <span className="text-xs font-bold tracking-[0.4em] uppercase" style={{ color: 'var(--accent)' }}>
-            THE UNDERGROUND TEKNO PLATFORM
-          </span>
-          <Zap size={14} style={{ color: 'var(--accent)' }} />
+    <section className="hero-bg py-20 px-6 text-center relative overflow-hidden">
+      <div className="max-w-3xl mx-auto">
+        {/* Product badge */}
+        <div className="inline-flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black" style={{ background: '#1a0533', border: '1px solid #3a1055', color: '#bf5fff' }}>
+            TB
+          </div>
+          <span className="text-white font-semibold text-lg">{featured.title}</span>
+          <span className="badge-new">New</span>
         </div>
 
-        <h1 className="font-black uppercase leading-none mb-4" style={{ fontSize: 'clamp(3rem, 12vw, 9rem)', letterSpacing: '-0.02em' }}>
-          <span style={{ color: 'var(--text)' }}>AUDIO</span>
-          <span style={{ color: 'var(--accent)' }}>BABE</span>
+        {/* Headline */}
+        <h1 className="font-black text-5xl md:text-7xl mb-5 leading-tight tracking-tight text-white">
+          Machine Unlocked
         </h1>
-
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="h-px flex-1 max-w-16" style={{ background: 'var(--border)' }} />
-          <p className="text-xs font-bold tracking-[0.35em] uppercase" style={{ color: 'var(--muted)' }}>
-            TEKNO EDITION
-          </p>
-          <div className="h-px flex-1 max-w-16" style={{ background: 'var(--border)' }} />
-        </div>
-
-        <p className="text-base mb-10 max-w-lg mx-auto leading-relaxed" style={{ color: 'var(--muted)' }}>
-          Raw. Industrial. Unrelenting. Discover the artists, labels and events
-          shaping the global tekno underground.
+        <p className="text-lg mb-10 max-w-xl mx-auto" style={{ color: '#999' }}>
+          {featured.description}
         </p>
 
+        {/* CTAs */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
-            onClick={() => onNavigate('tracks')}
-            className="px-8 py-3 text-xs font-bold tracking-[0.2em] uppercase transition-all hover:opacity-90 accent-glow"
-            style={{ background: 'var(--accent)', color: '#000' }}
+            className="btn-primary px-8 py-3 text-sm"
+            onClick={() => onAddToCart(featured.id)}
           >
-            Explore Tracks
+            Buy Now – ${featured.price.toFixed(2)}
           </button>
-          <button
-            onClick={() => onNavigate('events')}
-            className="px-8 py-3 text-xs font-bold tracking-[0.2em] uppercase border transition-colors"
-            style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
-          >
-            Find Events
+          <button className="btn-secondary px-8 py-3 text-sm">
+            Discover {featured.title}
           </button>
-        </div>
-
-        {/* Stats bar */}
-        <div className="mt-16 grid grid-cols-3 gap-4 max-w-sm mx-auto">
-          {[['12+', 'TRACKS'], ['6+', 'ARTISTS'], ['6+', 'EVENTS']].map(([num, label]) => (
-            <div key={label} className="text-center">
-              <div className="text-2xl font-black" style={{ color: 'var(--accent)' }}>{num}</div>
-              <div className="text-xs tracking-widest" style={{ color: 'var(--muted)' }}>{label}</div>
-            </div>
-          ))}
         </div>
       </div>
 
-      <button
-        onClick={() => onNavigate('tracks')}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce"
-        style={{ color: 'var(--muted)' }}
-      >
-        <ChevronDown size={20} />
-      </button>
+      {/* Product art */}
+      <div className="mt-16 max-w-4xl mx-auto rounded-2xl overflow-hidden" style={{ border: '1px solid #2a2a2a', background: '#111' }}>
+        <div className={`${featured.artClass} h-72 md:h-96 flex items-center justify-center relative`}>
+          {/* Abstract tekno art */}
+          <svg width="100%" height="100%" viewBox="0 0 800 400" className="absolute inset-0">
+            {[...Array(8)].map((_, i) => (
+              <g key={i}>
+                <line
+                  x1={100 + i * 90} y1="0" x2={60 + i * 80} y2="400"
+                  stroke="#bf5fff" strokeWidth="0.5" strokeOpacity="0.3"
+                />
+                <circle cx={120 + i * 85} cy={80 + (i % 3) * 100} r={2 + i * 0.5}
+                  fill="#bf5fff" fillOpacity="0.5" />
+              </g>
+            ))}
+            {[...Array(5)].map((_, i) => (
+              <rect key={i} x={50 + i * 140} y={150 + (i % 2) * 60}
+                width={30 + i * 5} height={40 + i * 10}
+                fill="none" stroke="#bf5fff" strokeWidth="0.5" strokeOpacity="0.4" />
+            ))}
+          </svg>
+          <div className="relative z-10 text-center">
+            <div className="text-5xl font-black tracking-tighter mb-2" style={{ color: '#bf5fff', textShadow: '0 0 40px rgba(191,95,255,0.5)' }}>
+              {featured.title}
+            </div>
+            <div className="text-sm font-semibold tracking-widest uppercase" style={{ color: '#888' }}>
+              {featured.artist} · {featured.bpm} BPM · {featured.tracks} TRACKS
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

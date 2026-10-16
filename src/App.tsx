@@ -1,81 +1,58 @@
 import { useState, useCallback } from 'react';
+import PromoBar from './components/PromoBar';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
-import TracksSection from './components/TracksSection';
-import ArtistsSection from './components/ArtistsSection';
-import LabelsSection from './components/LabelsSection';
-import EventsSection from './components/EventsSection';
-import Player from './components/Player';
+import ReleasesGrid from './components/ReleasesGrid';
+import Testimonials from './components/Testimonials';
+import Press from './components/Press';
+import About from './components/About';
 import Footer from './components/Footer';
-import { tracks, artists, labels, events } from './data/tracks';
-import type { Track } from './data/tracks';
+import CartPanel from './components/CartPanel';
+import { releases, testimonials, pressItems } from './data/releases';
+import type { Release } from './data/releases';
+
+interface CartItem { release: Release; qty: number; }
 
 export default function App() {
-  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [activeSection, setActiveSection] = useState('hero');
+  const [cartOpen, setCartOpen] = useState(false);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-  const handleSelect = useCallback((track: Track) => {
-    if (currentTrack?.id === track.id) {
-      setIsPlaying(p => !p);
-    } else {
-      setCurrentTrack(track);
-      setIsPlaying(true);
-    }
-  }, [currentTrack]);
-
-  const handleNext = useCallback(() => {
-    if (!currentTrack) return;
-    const idx = tracks.findIndex(t => t.id === currentTrack.id);
-    setCurrentTrack(tracks[(idx + 1) % tracks.length]);
-    setIsPlaying(true);
-  }, [currentTrack]);
-
-  const handlePrev = useCallback(() => {
-    if (!currentTrack) return;
-    const idx = tracks.findIndex(t => t.id === currentTrack.id);
-    setCurrentTrack(tracks[(idx - 1 + tracks.length) % tracks.length]);
-    setIsPlaying(true);
-  }, [currentTrack]);
-
-  const handleNavigate = useCallback((section: string) => {
-    setActiveSection(section);
-    if (section === 'hero') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      const el = document.getElementById(section);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+  const addToCart = useCallback((id: string) => {
+    const release = releases.find(r => r.id === id);
+    if (!release) return;
+    setCartItems(prev => {
+      const existing = prev.find(i => i.release.id === id);
+      if (existing) return prev.map(i => i.release.id === id ? { ...i, qty: i.qty + 1 } : i);
+      return [...prev, { release, qty: 1 }];
+    });
+    setCartOpen(true);
   }, []);
 
-  return (
-    <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
-      <Navbar activeSection={activeSection} onNavigate={handleNavigate} />
+  const removeFromCart = useCallback((id: string) => {
+    setCartItems(prev => prev.filter(i => i.release.id !== id));
+  }, []);
 
-      <main style={{ paddingTop: '56px', paddingBottom: currentTrack ? '64px' : '0' }}>
-        <Hero onNavigate={handleNavigate} />
-        <div className="border-t" style={{ borderColor: 'var(--border)' }} />
-        <TracksSection
-          tracks={tracks}
-          currentTrack={currentTrack}
-          isPlaying={isPlaying}
-          onSelect={handleSelect}
-        />
-        <div className="border-t" style={{ borderColor: 'var(--border)' }} />
-        <ArtistsSection artists={artists} />
-        <div className="border-t" style={{ borderColor: 'var(--border)' }} />
-        <LabelsSection labels={labels} />
-        <div className="border-t" style={{ borderColor: 'var(--border)' }} />
-        <EventsSection events={events} />
+  const cartCount = cartItems.reduce((sum, i) => sum + i.qty, 0);
+
+  return (
+    <div style={{ background: '#141414', minHeight: '100vh' }}>
+      <PromoBar />
+      <Navbar cartCount={cartCount} onCartOpen={() => setCartOpen(true)} />
+
+      <main>
+        <Hero onAddToCart={addToCart} />
+        <ReleasesGrid releases={releases} onAddToCart={addToCart} />
+        <Testimonials testimonials={testimonials} />
+        <Press items={pressItems} />
+        <About />
         <Footer />
       </main>
 
-      <Player
-        track={currentTrack}
-        isPlaying={isPlaying}
-        onPlayPause={() => setIsPlaying(p => !p)}
-        onNext={handleNext}
-        onPrev={handlePrev}
+      <CartPanel
+        open={cartOpen}
+        items={cartItems}
+        onClose={() => setCartOpen(false)}
+        onRemove={removeFromCart}
       />
     </div>
   );
