@@ -1,25 +1,39 @@
 import { useRef, useCallback } from 'react';
 
-export type TrackId = 'kick' | 'bass' | 'clap' | 'hihatC' | 'hihatO' | 'perc';
+export type TrackId = 'kick' | 'snare' | 'clap' | 'hhc' | 'hho' | 'tom' | 'ride' | 'perc';
+
+export interface VoiceParams {
+  tune: number;   // 0–1
+  decay: number;  // 0–1
+  tone: number;   // 0–1
+  level: number;  // 0–1
+}
 
 export interface Track {
   id: TrackId;
   label: string;
-  steps: boolean[];
-  volume: number;
+  steps: number[]; // 0=off, >0=velocity (0.4/0.7/1.0)
+  params: VoiceParams;
   color: string;
+  muted: boolean;
 }
 
 const STEPS = 16;
 
+function defaultParams(): VoiceParams {
+  return { tune: 0.5, decay: 0.5, tone: 0.5, level: 0.8 };
+}
+
 export function defaultTracks(): Track[] {
   return [
-    { id: 'kick',   label: 'KICK',    steps: Array(STEPS).fill(false), volume: 0.9, color: '#4a6cf7' },
-    { id: 'bass',   label: 'SUB',     steps: Array(STEPS).fill(false), volume: 0.7, color: '#9b59b6' },
-    { id: 'clap',   label: 'CLAP',    steps: Array(STEPS).fill(false), volume: 0.75, color: '#e63946' },
-    { id: 'hihatC', label: 'HH CL',   steps: Array(STEPS).fill(false), volume: 0.5, color: '#00b4d8' },
-    { id: 'hihatO', label: 'HH OP',   steps: Array(STEPS).fill(false), volume: 0.4, color: '#06d6a0' },
-    { id: 'perc',   label: 'PERC',    steps: Array(STEPS).fill(false), volume: 0.55, color: '#ff6b00' },
+    { id: 'kick',  label: 'KICK',   steps: Array(STEPS).fill(0), params: defaultParams(), color: '#4a6cf7', muted: false },
+    { id: 'snare', label: 'SNARE',  steps: Array(STEPS).fill(0), params: defaultParams(), color: '#a78bfa', muted: false },
+    { id: 'clap',  label: 'CLAP',   steps: Array(STEPS).fill(0), params: defaultParams(), color: '#e63946', muted: false },
+    { id: 'hhc',   label: 'HH CL',  steps: Array(STEPS).fill(0), params: defaultParams(), color: '#00b4d8', muted: false },
+    { id: 'hho',   label: 'HH OP',  steps: Array(STEPS).fill(0), params: defaultParams(), color: '#06d6a0', muted: false },
+    { id: 'tom',   label: 'TOM',    steps: Array(STEPS).fill(0), params: defaultParams(), color: '#fbbf24', muted: false },
+    { id: 'ride',  label: 'RIDE',   steps: Array(STEPS).fill(0), params: defaultParams(), color: '#f97316', muted: false },
+    { id: 'perc',  label: 'PERC',   steps: Array(STEPS).fill(0), params: defaultParams(), color: '#ec4899', muted: false },
   ];
 }
 
@@ -42,7 +56,11 @@ export function useAudioEngine() {
     return ctxRef.current;
   }, []);
 
-  const triggerKick = useCallback((ctx: AudioContext, when: number, vol: number) => {
+  const triggerKick = useCallback((ctx: AudioContext, when: number, vel: number, p: VoiceParams) => {
+    const baseFreq = 40 + p.tune * 120;         // 40–160 Hz
+    const decayTime = 0.2 + p.decay * 0.6;      // 0.2–0.8s
+    const distAmt = 100 + p.tone * 600;
+
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     const dist = ctx.createWaveShaper();
@@ -50,51 +68,68 @@ export function useAudioEngine() {
     const curve = new Float32Array(256);
     for (let i = 0; i < 256; i++) {
       const x = (i * 2) / 256 - 1;
-      curve[i] = (Math.PI + 400) * x / (Math.PI + 400 * Math.abs(x));
+      curve[i] = (Math.PI + distAmt) * x / (Math.PI + distAmt * Math.abs(x));
     }
     dist.curve = curve;
 
     osc.connect(gain); gain.connect(dist); dist.connect(masterRef.current!);
 
-    osc.frequency.setValueAtTime(160, when);
-    osc.frequency.exponentialRampToValueAtTime(40, when + 0.06);
     osc.type = 'sine';
+    osc.frequency.setValueAtTime(baseFreq * 3.5, when);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq, when + 0.06);
 
-    gain.gain.setValueAtTime(vol, when);
-    gain.gain.exponentialRampToValueAtTime(0.001, when + 0.45);
+    gain.gain.setValueAtTime(vel * p.level, when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + decayTime);
 
-    osc.start(when);
-    osc.stop(when + 0.45);
+    osc.start(when); osc.stop(when + decayTime);
   }, []);
 
-  const triggerSub = useCallback((ctx: AudioContext, when: number, vol: number) => {
+  const triggerSnare = useCallback((ctx: AudioContext, when: number, vel: number, p: VoiceParams) => {
+    const toneFreq = 150 + p.tune * 200;        // 150–350 Hz
+    const decayTime = 0.1 + p.decay * 0.3;      // 0.1–0.4s
+    const noiseMix = 0.3 + p.tone * 0.7;        // noise amount
+
+    // Tonal body
     const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const oscGain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(toneFreq, when);
+    osc.frequency.exponentialRampToValueAtTime(toneFreq * 0.5, when + decayTime);
+    osc.connect(oscGain); oscGain.connect(masterRef.current!);
+    oscGain.gain.setValueAtTime(vel * p.level * (1 - noiseMix) * 0.8, when);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, when + decayTime);
+    osc.start(when); osc.stop(when + decayTime);
+
+    // Noise snare rattle
+    const bufSize = Math.floor(ctx.sampleRate * decayTime);
+    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+
+    const src = ctx.createBufferSource();
     const filter = ctx.createBiquadFilter();
+    const noiseGain = ctx.createGain();
 
-    osc.connect(filter); filter.connect(gain); gain.connect(masterRef.current!);
+    src.buffer = buf;
+    filter.type = 'bandpass';
+    filter.frequency.value = 2000 + p.tone * 3000;
+    filter.Q.value = 0.5;
 
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(55, when);
-    osc.frequency.exponentialRampToValueAtTime(35, when + 0.25);
-
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(400, when);
-    filter.frequency.exponentialRampToValueAtTime(80, when + 0.3);
-
-    gain.gain.setValueAtTime(vol * 0.8, when);
-    gain.gain.exponentialRampToValueAtTime(0.001, when + 0.35);
-
-    osc.start(when);
-    osc.stop(when + 0.35);
+    src.connect(filter); filter.connect(noiseGain); noiseGain.connect(masterRef.current!);
+    noiseGain.gain.setValueAtTime(vel * p.level * noiseMix, when);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, when + decayTime);
+    src.start(when); src.stop(when + decayTime);
   }, []);
 
-  const triggerClap = useCallback((ctx: AudioContext, when: number, vol: number) => {
-    [0, 0.01, 0.02].forEach(offset => {
-      const bufSize = ctx.sampleRate * 0.15;
+  const triggerClap = useCallback((ctx: AudioContext, when: number, vel: number, p: VoiceParams) => {
+    const decayTime = 0.08 + p.decay * 0.2;
+    const freq = 800 + p.tune * 1500;
+
+    [0, 0.008, 0.016].forEach(offset => {
+      const bufSize = Math.floor(ctx.sampleRate * 0.2);
       const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
       const data = buf.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1);
+      for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
 
       const src = ctx.createBufferSource();
       const filter = ctx.createBiquadFilter();
@@ -102,71 +137,113 @@ export function useAudioEngine() {
 
       src.buffer = buf;
       filter.type = 'bandpass';
-      filter.frequency.value = 1200 + offset * 500;
-      filter.Q.value = 0.7;
+      filter.frequency.value = freq + p.tone * 500;
+      filter.Q.value = 0.8;
 
       src.connect(filter); filter.connect(gain); gain.connect(masterRef.current!);
-
-      gain.gain.setValueAtTime(vol * 0.6, when + offset);
-      gain.gain.exponentialRampToValueAtTime(0.001, when + offset + 0.12);
-
-      src.start(when + offset);
-      src.stop(when + offset + 0.15);
+      gain.gain.setValueAtTime(vel * p.level * 0.5, when + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, when + offset + decayTime);
+      src.start(when + offset); src.stop(when + offset + 0.2);
     });
   }, []);
 
-  const triggerHihat = useCallback((ctx: AudioContext, when: number, vol: number, open: boolean) => {
-    const duration = open ? 0.3 : 0.06;
-    const bufSize = ctx.sampleRate * duration;
+  const triggerHihat = useCallback((ctx: AudioContext, when: number, vel: number, open: boolean, p: VoiceParams) => {
+    const decayTime = open ? 0.15 + p.decay * 0.5 : 0.03 + p.decay * 0.08;
+    const cutoff = open ? 5000 + p.tune * 4000 : 7000 + p.tune * 5000;
+    const bufSize = Math.floor(ctx.sampleRate * (decayTime + 0.05));
     const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
 
     const src = ctx.createBufferSource();
-    const filter = ctx.createBiquadFilter();
+    const hp = ctx.createBiquadFilter();
+    const bp = ctx.createBiquadFilter();
     const gain = ctx.createGain();
 
     src.buffer = buf;
-    filter.type = 'highpass';
-    filter.frequency.value = open ? 7000 : 9000;
+    hp.type = 'highpass'; hp.frequency.value = cutoff;
+    bp.type = 'bandpass'; bp.frequency.value = cutoff + p.tone * 3000; bp.Q.value = 0.3;
 
-    src.connect(filter); filter.connect(gain); gain.connect(masterRef.current!);
-
-    gain.gain.setValueAtTime(vol * 0.5, when);
-    gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
-
-    src.start(when);
-    src.stop(when + duration);
+    src.connect(hp); hp.connect(bp); bp.connect(gain); gain.connect(masterRef.current!);
+    gain.gain.setValueAtTime(vel * p.level * 0.5, when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + decayTime);
+    src.start(when); src.stop(when + decayTime + 0.05);
   }, []);
 
-  const triggerPerc = useCallback((ctx: AudioContext, when: number, vol: number) => {
+  const triggerTom = useCallback((ctx: AudioContext, when: number, vel: number, p: VoiceParams) => {
+    const baseFreq = 60 + p.tune * 200;
+    const decayTime = 0.15 + p.decay * 0.5;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(baseFreq * 2, when);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq, when + 0.05);
+
+    filter.type = 'lowpass';
+    filter.frequency.value = 500 + p.tone * 2000;
+
+    osc.connect(filter); filter.connect(gain); gain.connect(masterRef.current!);
+    gain.gain.setValueAtTime(vel * p.level * 0.9, when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + decayTime);
+    osc.start(when); osc.stop(when + decayTime);
+  }, []);
+
+  const triggerRide = useCallback((ctx: AudioContext, when: number, vel: number, p: VoiceParams) => {
+    const decayTime = 0.3 + p.decay * 1.2;
+    const cutoff = 4000 + p.tune * 5000;
+    const bufSize = Math.floor(ctx.sampleRate * decayTime);
+    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+
+    const src = ctx.createBufferSource();
+    const hp = ctx.createBiquadFilter();
+    const bp = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    src.buffer = buf;
+    hp.type = 'highpass'; hp.frequency.value = cutoff;
+    bp.type = 'peaking'; bp.frequency.value = 6000 + p.tone * 4000; bp.gain.value = 6;
+
+    src.connect(hp); hp.connect(bp); bp.connect(gain); gain.connect(masterRef.current!);
+    gain.gain.setValueAtTime(vel * p.level * 0.35, when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + decayTime);
+    src.start(when); src.stop(when + decayTime);
+  }, []);
+
+  const triggerPerc = useCallback((ctx: AudioContext, when: number, vel: number, p: VoiceParams) => {
+    const baseFreq = 200 + p.tune * 600;
+    const decayTime = 0.05 + p.decay * 0.25;
+
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
+    osc.type = p.tone < 0.33 ? 'triangle' : p.tone < 0.66 ? 'square' : 'sawtooth';
+    osc.frequency.setValueAtTime(baseFreq * 1.5, when);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq, when + decayTime * 0.3);
+
     osc.connect(gain); gain.connect(masterRef.current!);
-
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(300, when);
-    osc.frequency.exponentialRampToValueAtTime(80, when + 0.08);
-
-    gain.gain.setValueAtTime(vol * 0.7, when);
-    gain.gain.exponentialRampToValueAtTime(0.001, when + 0.1);
-
-    osc.start(when);
-    osc.stop(when + 0.1);
+    gain.gain.setValueAtTime(vel * p.level * 0.6, when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + decayTime);
+    osc.start(when); osc.stop(when + decayTime);
   }, []);
 
-  const trigger = useCallback((id: TrackId, when: number, vol: number) => {
+  const trigger = useCallback((id: TrackId, when: number, vel: number, params: VoiceParams) => {
     const ctx = getCtx();
     switch (id) {
-      case 'kick':   triggerKick(ctx, when, vol); break;
-      case 'bass':   triggerSub(ctx, when, vol); break;
-      case 'clap':   triggerClap(ctx, when, vol); break;
-      case 'hihatC': triggerHihat(ctx, when, vol, false); break;
-      case 'hihatO': triggerHihat(ctx, when, vol, true); break;
-      case 'perc':   triggerPerc(ctx, when, vol); break;
+      case 'kick':  triggerKick(ctx, when, vel, params); break;
+      case 'snare': triggerSnare(ctx, when, vel, params); break;
+      case 'clap':  triggerClap(ctx, when, vel, params); break;
+      case 'hhc':   triggerHihat(ctx, when, vel, false, params); break;
+      case 'hho':   triggerHihat(ctx, when, vel, true, params); break;
+      case 'tom':   triggerTom(ctx, when, vel, params); break;
+      case 'ride':  triggerRide(ctx, when, vel, params); break;
+      case 'perc':  triggerPerc(ctx, when, vel, params); break;
     }
-  }, [getCtx, triggerKick, triggerSub, triggerClap, triggerHihat, triggerPerc]);
+  }, [getCtx, triggerKick, triggerSnare, triggerClap, triggerHihat, triggerTom, triggerRide, triggerPerc]);
 
   const start = useCallback((getTracksAndBpm: () => { tracks: Track[]; bpm: number }, onStep: (s: number) => void) => {
     const ctx = getCtx();
@@ -185,7 +262,9 @@ export function useAudioEngine() {
       while (nextNoteTimeRef.current < ctx.currentTime + LOOKAHEAD) {
         const step = currentStepRef.current;
         tracks.forEach(t => {
-          if (t.steps[step]) trigger(t.id, nextNoteTimeRef.current, t.volume);
+          if (!t.muted && t.steps[step] > 0) {
+            trigger(t.id, nextNoteTimeRef.current, t.steps[step], t.params);
+          }
         });
         onStep(step);
         nextNoteTimeRef.current += stepDur;
@@ -203,9 +282,9 @@ export function useAudioEngine() {
     currentStepRef.current = 0;
   }, []);
 
-  const preview = useCallback((id: TrackId, vol: number) => {
+  const preview = useCallback((id: TrackId, params: VoiceParams) => {
     const ctx = getCtx();
-    trigger(id, ctx.currentTime, vol);
+    trigger(id, ctx.currentTime, 1.0, params);
   }, [getCtx, trigger]);
 
   return { start, stop, preview };
