@@ -276,6 +276,17 @@ export default function Creator() {
   useEffect(() => { voicesRef.current = voices; }, [voices]);
   useEffect(() => { bpmRef.current = bpm; }, [bpm]);
 
+  // Bridge: receive drum triggers from Electribe 2 via custom event
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { drumVoice, velocity } = (e as CustomEvent<{ drumVoice: SynthType; velocity: number }>).detail;
+      const voice = voicesRef.current.find(v => v.synthType === drumVoice) ?? voicesRef.current[0];
+      if (voice) engine.preview({ ...voice, params: { ...voice.params, level: voice.params.level * velocity } });
+    };
+    window.addEventListener('audiobabe:drum', handler as EventListener);
+    return () => window.removeEventListener('audiobabe:drum', handler as EventListener);
+  }, [engine]);
+
   const selectedVoice = voices.find(v => v.id === selectedId) ?? voices[0];
 
   // Helpers

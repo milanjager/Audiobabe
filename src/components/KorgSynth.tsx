@@ -264,6 +264,17 @@ export default function KorgSynth() {
 
   useEffect(() => { engine.updateParams(params); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Bridge: receive note triggers from Electribe 2 via custom event
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { midiNote, duration = 0.15 } = (e as CustomEvent<{ midiNote: number; velocity: number; duration?: number }>).detail;
+      engine.noteOn(midiNote);
+      setTimeout(() => engine.noteOff(midiNote), duration * 1000);
+    };
+    window.addEventListener('audiobabe:note', handler as EventListener);
+    return () => window.removeEventListener('audiobabe:note', handler as EventListener);
+  }, [engine]);
+
   const noteOn = useCallback((midi: number) => {
     engine.noteOn(midi);
     setActiveKeys(prev => new Set([...prev, midi]));
