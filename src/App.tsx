@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import ReleasesGrid from './components/ReleasesGrid';
 import Creator from './components/Creator';
+import KorgSynth from './components/KorgSynth';
 import Testimonials from './components/Testimonials';
 import Press from './components/Press';
 import About from './components/About';
@@ -44,6 +45,7 @@ export default function App() {
         <Hero onAddToCart={addToCart} />
         <ReleasesGrid releases={releases} onAddToCart={addToCart} />
         <Creator />
+        <KorgSynth />
         <Testimonials testimonials={testimonials} />
         <Press items={pressItems} />
         <About />

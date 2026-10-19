@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Play, Square, RotateCcw, Shuffle, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
-import { useAudioEngine, defaultVoices } from '../hooks/useAudioEngine';
+import { useAudioEngine, defaultVoices, VOICE_PARAM_LABELS, EFFECTS_LABELS } from '../hooks/useAudioEngine';
 import type { Voice, SynthParams, SynthType } from '../hooks/useAudioEngine';
 
 // ─── Hex geometry ─────────────────────────────────────────────────────────────
@@ -266,6 +266,9 @@ export default function Creator() {
   const [view, setView] = useState<'pads' | 'seq'>('pads');
   const [presetName, setPresetName] = useState('Massive Analog Drums');
   const [activeBottomLeft, setActiveBottomLeft] = useState<'synth' | 'fx'>('synth');
+  const [masterCutoff, setMasterCutoff] = useState(0.7);
+  const [masterComp, setMasterComp] = useState(0.3);
+  const [masterLevel, setMasterLevel] = useState(0.85);
 
   const engine = useAudioEngine();
   const voicesRef = useRef(voices);
@@ -505,38 +508,30 @@ export default function Creator() {
                 </div>
               </div>
 
-              {activeBottomLeft === 'synth' ? (
-                <div className="flex gap-3 justify-center">
-                  <VertSlider value={p.tone}  onChange={v => setParam('tone',v)}  label="tone"  color={selectedVoice.color} />
-                  <VertSlider value={p.pitch} onChange={v => setParam('pitch',v)} label="pitch" color={selectedVoice.color} />
-                  <VertSlider value={p.decay} onChange={v => setParam('decay',v)} label="decay" color={selectedVoice.color} />
-                  <VertSlider value={p.slap}  onChange={v => setParam('slap',v)}  label="slap"  color={selectedVoice.color} />
-                  <VertSlider value={p.pulse} onChange={v => setParam('pulse',v)} label="pulse" color={selectedVoice.color} />
-                </div>
-              ) : (
-                <div className="flex gap-3 justify-center">
-                  <VertSlider value={p.drive}  onChange={v => setParam('drive',v)}  label="drive"  color={selectedVoice.color} />
-                  <VertSlider value={0.3}       onChange={() => {}}                  label="excit"  color={selectedVoice.color} />
-                  <VertSlider value={0.2}       onChange={() => {}}                  label="satur"  color={selectedVoice.color} />
-                  <VertSlider value={0.4}       onChange={() => {}}                  label="comp"   color={selectedVoice.color} />
-                  <VertSlider value={0.1}       onChange={() => {}}                  label="reverb" color={selectedVoice.color} />
-                </div>
-              )}
-            </div>
-
-            {/* Effects panel placeholder (mirrors synth panel) */}
-            <div className="p-4 border-r" style={{ borderColor: '#1e1e28' }}>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-medium tracking-widest" style={{ color: '#888' }}>effects</span>
-                <button onClick={() => randomizeVoice(selectedId)} className="text-xs transition-colors hover:text-white" style={{ color: '#444' }}>
-                  <Shuffle size={11} />
-                </button>
-              </div>
-              <div className="flex gap-3 justify-center">
-                {[['excit',0.3],['drive',p.drive],['satur',0.2],['comp',0.4],['reverb',0.1]].map(([l,v]) => (
-                  <VertSlider key={l as string} value={v as number} onChange={val => l === 'drive' ? setParam('drive', val) : undefined} label={l as string} color="#3b82f6" />
-                ))}
-              </div>
+              {activeBottomLeft === 'synth' ? (() => {
+                const pl = VOICE_PARAM_LABELS[selectedVoice.synthType];
+                return (
+                  <div className="flex gap-3 justify-center">
+                    <VertSlider value={p.tone}  onChange={v => setParam('tone',v)}  label={pl[0]} color={selectedVoice.color} />
+                    <VertSlider value={p.pitch} onChange={v => setParam('pitch',v)} label={pl[1]} color={selectedVoice.color} />
+                    <VertSlider value={p.decay} onChange={v => setParam('decay',v)} label={pl[2]} color={selectedVoice.color} />
+                    <VertSlider value={p.slap}  onChange={v => setParam('slap',v)}  label={pl[3]} color={selectedVoice.color} />
+                    <VertSlider value={p.pulse} onChange={v => setParam('pulse',v)} label={pl[4]} color={selectedVoice.color} />
+                  </div>
+                );
+              })() : (() => {
+                const el = EFFECTS_LABELS[selectedVoice.synthType];
+                // map effects label positions to params: [sub/dispers/ring/wash/exciter → drive], exciter, tilt/satur, satur/comp, reverb
+                return (
+                  <div className="flex gap-3 justify-center">
+                    <VertSlider value={p.drive}   onChange={v => setParam('drive',v)}   label={el[0]} color={selectedVoice.color} />
+                    <VertSlider value={p.exciter} onChange={v => setParam('exciter',v)} label={el[1]} color={selectedVoice.color} />
+                    <VertSlider value={p.satur}   onChange={v => setParam('satur',v)}   label={el[2]} color={selectedVoice.color} />
+                    <VertSlider value={p.comp}    onChange={v => setParam('comp',v)}    label={el[3]} color={selectedVoice.color} />
+                    <VertSlider value={p.reverb}  onChange={v => setParam('reverb',v)}  label={el[4]} color={selectedVoice.color} />
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Voice panel */}
@@ -547,18 +542,18 @@ export default function Creator() {
                 <button onClick={() => { const idx = voices.findIndex(v=>v.id===selectedId); setSelectedId(voices[(idx+1)%voices.length].id); }} style={{ color: '#444' }}><ChevronRight size={13} /></button>
               </div>
 
-              <div className="flex items-center justify-center gap-3">
-                <Dial value={p.pan} onChange={v => setParam('pan', v)} size={52} label="pan" color={selectedVoice.color} />
-                <div className="flex flex-col gap-2">
-                  <button onClick={() => toggleSolo(selectedId)} className="w-8 h-6 rounded text-xs font-bold transition-colors"
-                    style={{ background: selectedVoice.solo ? '#f59e0b' : '#1e1e2a', color: selectedVoice.solo ? '#000' : '#555', border: '1px solid #2a2a35' }}>S</button>
-                  <button onClick={() => toggleMute(selectedId)} className="w-8 h-6 rounded text-xs font-bold transition-colors"
-                    style={{ background: selectedVoice.muted ? '#e63946' : '#1e1e2a', color: selectedVoice.muted ? '#fff' : '#555', border: '1px solid #2a2a35' }}>M</button>
+              <div className="flex items-center justify-center gap-2">
+                <Dial value={p.pan} onChange={v => setParam('pan', v)} size={48} label="pan" color={selectedVoice.color} />
+                <VertSlider value={p.level} onChange={v => setParam('level', v)} label="level" color={selectedVoice.color} trackH={72} />
+                <div className="flex flex-col gap-1.5">
+                  <button onClick={() => toggleSolo(selectedId)} className="w-7 h-5 rounded text-xs font-bold transition-colors"
+                    style={{ background: selectedVoice.solo ? '#f59e0b' : '#1e1e2a', color: selectedVoice.solo ? '#000' : '#555', border: '1px solid #2a2a35', fontSize: 9 }}>S</button>
+                  <button onClick={() => toggleMute(selectedId)} className="w-7 h-5 rounded text-xs font-bold transition-colors"
+                    style={{ background: selectedVoice.muted ? '#e63946' : '#1e1e2a', color: selectedVoice.muted ? '#fff' : '#555', border: '1px solid #2a2a35', fontSize: 9 }}>M</button>
                 </div>
-                <Dial value={p.humanize} onChange={v => setParam('humanize', v)} size={52} label="human" color="#4a6cf7" />
+                <Dial value={p.humanize} onChange={v => setParam('humanize', v)} size={48} label="human" color="#4a6cf7" />
               </div>
 
-              {/* Randomize duck button */}
               <div className="flex justify-center mt-2">
                 <button onClick={() => randomizeVoice(selectedId)}
                   className="text-xs px-3 py-1 rounded-lg flex items-center gap-1.5 transition-colors hover:opacity-80"
@@ -590,9 +585,12 @@ export default function Creator() {
               </div>
 
               <div className="flex gap-2 justify-start">
-                {[['cal',0.5],['cut',0.7],['hum',0.2],['lim',0.85],['clip',0.6],['lvl',p.level]].map(([l,v]) => (
-                  <VertSlider key={l as string} value={v as number} onChange={val => l === 'lvl' ? setParam('level', val) : undefined} label={l as string} color="#4a6cf7" trackH={72} />
-                ))}
+                <VertSlider value={0.5}          onChange={() => {}}                        label="cal"  color="#4a6cf7" trackH={72} />
+                <VertSlider value={masterCutoff} onChange={v => setMasterCutoff(v)}        label="cut"  color="#4a6cf7" trackH={72} />
+                <VertSlider value={p.humanize}   onChange={v => setParam('humanize', v)}   label="hum"  color="#4a6cf7" trackH={72} />
+                <VertSlider value={masterComp}   onChange={v => setMasterComp(v)}          label="lim"  color="#4a6cf7" trackH={72} />
+                <VertSlider value={0.6}          onChange={() => {}}                        label="clip" color="#4a6cf7" trackH={72} />
+                <VertSlider value={masterLevel}  onChange={v => setMasterLevel(v)}         label="lvl"  color="#4a6cf7" trackH={72} />
               </div>
             </div>
           </div>
