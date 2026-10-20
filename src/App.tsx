@@ -6,6 +6,7 @@ import ReleasesGrid from './components/ReleasesGrid';
 import Creator from './components/Creator';
 import ElectribeSynth from './components/ElectribeSynth';
 import KorgSynth from './components/KorgSynth';
+import NeuralSequencer from './components/NeuralSequencer';
 import Testimonials from './components/Testimonials';
 import Press from './components/Press';
 import About from './components/About';
@@ -164,6 +165,15 @@ export default function App() {
       <main>
         <Hero onAddToCart={addToCart} />
         <ReleasesGrid releases={releases} onAddToCart={addToCart} />
+
+        {/* Neural Sequencer — probability step sequencer with motion control */}
+        <NeuralSequencer />
+
+        {/* Patch route: Neural Seq → Electribe 2 (sync) */}
+        <PatchCable
+          from="NEURAL SEQ" to="ELECTRIBE 2" color="#a855f7"
+          eventName="audiobabe:drum" direction="down"
+        />
 
         {/* Tekno drum synthesizer */}
         <Creator />
