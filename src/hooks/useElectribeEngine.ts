@@ -137,7 +137,6 @@ function buildOscBank(
   ctx: AudioContext, type: number, freq: number, edit: number,
   when: number, decay: number,
 ): AudioNode {
-  const merge = ctx.createChannelMerger(2);
   const g = ctx.createGain();
   g.gain.setValueAtTime(0, when);
   g.gain.linearRampToValueAtTime(0.8, when + 0.005);
