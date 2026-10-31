@@ -26,14 +26,17 @@ export interface NTrack {
   filterFreq: number;
   filterRes: number;
   decay: number;
-  synthType: string;   // chosen sound preset
+  attack: number;      // 0–0.4 s
+  reverbSend: number;  // 0–1
+  delaySend: number;   // 0–1
+  synthType: string;
   steps: NStep[];
 }
 
 export interface NEngineState {
   playing: boolean;
   bpm: number;
-  swing: number;       // 0–50 (%)
+  swing: number;
   currentStep: number;
   fillActive: boolean;
   loopCount: number;
@@ -43,10 +46,14 @@ export interface NEngineState {
   webcamFilter: number;
   webcamReverb: number;
   webcamDelay: number;
+  globalReverb: number;   // 0–1 master reverb
+  globalDelay: number;    // 0–1 master delay
+  currentPattern: number; // 0–3
+  patternSlots: NStep[][][]; // [pattern][track][step]
   tracks: NTrack[];
 }
 
-// ─── Sound bank definitions ───────────────────────────────────────────────────
+// ─── Sound bank ───────────────────────────────────────────────────────────────
 
 export const ROLE_SYNTH_OPTIONS: Record<TrackRole, { id: string; label: string }[]> = {
   kick:  [{ id: 'sine',     label: 'SINE'  }, { id: 'punch', label: 'PUNCH' }, { id: 'sub',   label: 'SUB'  }],
@@ -54,7 +61,7 @@ export const ROLE_SYNTH_OPTIONS: Record<TrackRole, { id: string; label: string }
   hh_c:  [{ id: 'crisp',   label: 'CRISP' }, { id: 'dark',  label: 'DARK'  }, { id: 'metal', label: 'METAL'}],
   hh_o:  [{ id: 'crisp',   label: 'CRISP' }, { id: 'long',  label: 'LONG'  }, { id: 'wash',  label: 'WASH' }],
   bass:  [{ id: 'saw',      label: 'SAW'   }, { id: 'acid',  label: 'ACID'  }, { id: 'reese', label: 'REESE'}],
-  lead:  [{ id: 'supersaw', label: 'SUPER' }, { id: 'square',label: 'SQR'   }, { id: 'pluck', label: 'PLUCK'}],
+  lead:  [{ id: 'supersaw', label: 'SUPER' }, { id: 'square',label: 'SQR'  }, { id: 'pluck', label: 'PLUCK'}],
   chord: [{ id: 'minor',    label: 'MIN'   }, { id: 'major', label: 'MAJ'   }, { id: 'pad',   label: 'PAD'  }],
   fx:    [{ id: 'fm',       label: 'FM'    }, { id: 'am',    label: 'AM'    }, { id: 'noise', label: 'NOISE'}],
 };
@@ -86,14 +93,14 @@ function makeStep(active = false): NStep {
 }
 
 const TRACK_DEFS: Omit<NTrack, 'muted' | 'volume' | 'steps' | 'synthType'>[] = [
-  { role: 'kick',  name: 'KICK',  color: '#f97316', rootNote: 41, filterFreq: 120,  filterRes: 1,   decay: 0.55 },
-  { role: 'snare', name: 'SNARE', color: '#ef4444', rootNote: 48, filterFreq: 3500, filterRes: 2,   decay: 0.22 },
-  { role: 'hh_c',  name: 'HH-C',  color: '#eab308', rootNote: 60, filterFreq: 8000, filterRes: 3,   decay: 0.05 },
-  { role: 'hh_o',  name: 'HH-O',  color: '#fde047', rootNote: 62, filterFreq: 6500, filterRes: 2,   decay: 0.22 },
-  { role: 'bass',  name: 'BASS',  color: '#a855f7', rootNote: 33, filterFreq: 700,  filterRes: 5,   decay: 0.32 },
-  { role: 'lead',  name: 'LEAD',  color: '#22c55e', rootNote: 57, filterFreq: 2800, filterRes: 3.5, decay: 0.18 },
-  { role: 'chord', name: 'CHORD', color: '#3b82f6', rootNote: 45, filterFreq: 1800, filterRes: 1.5, decay: 0.7  },
-  { role: 'fx',    name: 'FX',    color: '#ec4899', rootNote: 36, filterFreq: 1200, filterRes: 8,   decay: 0.9  },
+  { role: 'kick',  name: 'KICK',  color: '#f97316', rootNote: 41, filterFreq: 120,  filterRes: 1,   decay: 0.55, attack: 0.003, reverbSend: 0.1,  delaySend: 0.05 },
+  { role: 'snare', name: 'SNARE', color: '#ef4444', rootNote: 48, filterFreq: 3500, filterRes: 2,   decay: 0.22, attack: 0.004, reverbSend: 0.2,  delaySend: 0.1  },
+  { role: 'hh_c',  name: 'HH-C',  color: '#eab308', rootNote: 60, filterFreq: 8000, filterRes: 3,   decay: 0.05, attack: 0.002, reverbSend: 0.05, delaySend: 0.0  },
+  { role: 'hh_o',  name: 'HH-O',  color: '#fde047', rootNote: 62, filterFreq: 6500, filterRes: 2,   decay: 0.22, attack: 0.003, reverbSend: 0.15, delaySend: 0.05 },
+  { role: 'bass',  name: 'BASS',  color: '#a855f7', rootNote: 33, filterFreq: 700,  filterRes: 5,   decay: 0.32, attack: 0.01,  reverbSend: 0.1,  delaySend: 0.15 },
+  { role: 'lead',  name: 'LEAD',  color: '#22c55e', rootNote: 57, filterFreq: 2800, filterRes: 3.5, decay: 0.18, attack: 0.02,  reverbSend: 0.3,  delaySend: 0.25 },
+  { role: 'chord', name: 'CHORD', color: '#3b82f6', rootNote: 45, filterFreq: 1800, filterRes: 1.5, decay: 0.7,  attack: 0.06,  reverbSend: 0.45, delaySend: 0.1  },
+  { role: 'fx',    name: 'FX',    color: '#ec4899', rootNote: 36, filterFreq: 1200, filterRes: 8,   decay: 0.9,  attack: 0.08,  reverbSend: 0.35, delaySend: 0.35 },
 ];
 
 const DEFAULT_PATTERNS: Record<TrackRole, boolean[]> = {
@@ -121,9 +128,31 @@ export function defaultNTracks(): NTrack[] {
   }));
 }
 
+function makeEmptySteps(): NStep[][] {
+  return Array.from({ length: 8 }, () => Array.from({ length: 16 }, () => makeStep(false)));
+}
+
+function defaultPatternSlots(): NStep[][][] {
+  const initial = defaultNTracks().map(t => t.steps);
+  return [initial, makeEmptySteps(), makeEmptySteps(), makeEmptySteps()];
+}
+
 // ─── Audio synthesis ──────────────────────────────────────────────────────────
 
-// KICK variants
+// Helper: generate synthetic reverb IR
+function createReverbIR(ctx: AudioContext, duration = 1.8): AudioBuffer {
+  const len = Math.floor(ctx.sampleRate * duration);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.2);
+    }
+  }
+  return buf;
+}
+
+// KICK
 function synthSineKick(ctx: AudioContext, when: number, decay: number, vol: number) {
   const o = ctx.createOscillator(), e = ctx.createGain();
   o.type = 'sine';
@@ -136,14 +165,12 @@ function synthSineKick(ctx: AudioContext, when: number, decay: number, vol: numb
 }
 
 function synthPunchKick(ctx: AudioContext, when: number, decay: number, vol: number) {
-  // Click transient + sine
   const click = ctx.createOscillator(), clickEnv = ctx.createGain();
   click.type = 'square'; click.frequency.value = 900;
   clickEnv.gain.setValueAtTime(vol * 0.4, when);
   clickEnv.gain.exponentialRampToValueAtTime(0.001, when + 0.015);
   click.connect(clickEnv); clickEnv.connect(ctx.destination);
   click.start(when); click.stop(when + 0.02);
-
   const o = ctx.createOscillator(), e = ctx.createGain();
   o.type = 'sine';
   o.frequency.setValueAtTime(220, when);
@@ -155,7 +182,6 @@ function synthPunchKick(ctx: AudioContext, when: number, decay: number, vol: num
 }
 
 function synthSubKick(ctx: AudioContext, when: number, decay: number, vol: number) {
-  // Very low sub
   const o = ctx.createOscillator(), e = ctx.createGain();
   o.type = 'sine';
   o.frequency.setValueAtTime(55, when);
@@ -166,7 +192,7 @@ function synthSubKick(ctx: AudioContext, when: number, decay: number, vol: numbe
   o.start(when); o.stop(when + decay * 1.3 + 0.05);
 }
 
-// SNARE variants
+// SNARE / HH helpers
 function synthNoise(ctx: AudioContext, when: number, filterFreq: number, filterQ: number, filterType: BiquadFilterType, decay: number, vol: number, dest: AudioNode = ctx.destination) {
   const len = Math.ceil(ctx.sampleRate * (decay + 0.05));
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -180,13 +206,11 @@ function synthNoise(ctx: AudioContext, when: number, filterFreq: number, filterQ
 }
 
 function synthVerbSnare(ctx: AudioContext, when: number, decay: number, vol: number) {
-  // Longer reverb tail
   synthNoise(ctx, when, 3000, 1.5, 'bandpass', decay * 2.5, vol * 0.5);
   synthNoise(ctx, when, 2000, 1,   'bandpass', decay * 1.5, vol * 0.4);
 }
 
 function synthCrackSnare(ctx: AudioContext, when: number, decay: number, vol: number) {
-  // Very short sharp crack
   const o = ctx.createOscillator(), e = ctx.createGain();
   o.type = 'triangle'; o.frequency.value = 280;
   e.gain.setValueAtTime(vol * 0.5, when); e.gain.exponentialRampToValueAtTime(0.001, when + 0.03);
@@ -194,13 +218,11 @@ function synthCrackSnare(ctx: AudioContext, when: number, decay: number, vol: nu
   synthNoise(ctx, when, 6000, 3, 'highpass', decay * 0.4, vol * 0.7);
 }
 
-// HH variants
 function synthHat(ctx: AudioContext, when: number, filterFreq: number, decay: number, vol: number) {
   synthNoise(ctx, when, filterFreq, 2, 'highpass', decay, vol * 0.5);
 }
 
 function synthMetalHat(ctx: AudioContext, when: number, decay: number, vol: number) {
-  // 6 detuned squares for metallic cymbal
   const oscs = [240, 331, 480, 660, 800, 1000];
   const hpf = ctx.createBiquadFilter(); hpf.type = 'highpass'; hpf.frequency.value = 7000;
   const env = ctx.createGain(); env.gain.setValueAtTime(vol * 0.4, when); env.gain.exponentialRampToValueAtTime(0.001, when + decay);
@@ -216,60 +238,75 @@ function synthWashHat(ctx: AudioContext, when: number, decay: number, vol: numbe
   synthNoise(ctx, when, 8000, 2, 'highpass',  decay * 2, vol * 0.25);
 }
 
-// BASS variants
-function synthSawBass(ctx: AudioContext, when: number, midi: number, filterFreq: number, filterQ: number, decay: number, vol: number, dest: AudioNode) {
+// BASS
+function synthSawBass(ctx: AudioContext, when: number, midi: number, filterFreq: number, filterQ: number, decay: number, atk: number, vol: number, dest: AudioNode) {
   const freq = 440 * Math.pow(2, (midi - 69) / 12);
   const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq;
   const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(filterFreq * 5, when); f.frequency.exponentialRampToValueAtTime(filterFreq, when + decay * 0.25); f.Q.value = filterQ;
-  const e = ctx.createGain(); e.gain.setValueAtTime(vol, when); e.gain.exponentialRampToValueAtTime(0.001, when + decay);
+  const e = ctx.createGain();
+  e.gain.setValueAtTime(0, when);
+  e.gain.linearRampToValueAtTime(vol, when + atk);
+  e.gain.exponentialRampToValueAtTime(0.001, when + atk + decay);
   o.connect(f); f.connect(e); e.connect(dest);
-  o.start(when); o.stop(when + decay + 0.05);
+  o.start(when); o.stop(when + atk + decay + 0.05);
 }
 
-function synthAcidBass(ctx: AudioContext, when: number, midi: number, filterFreq: number, decay: number, vol: number, dest: AudioNode) {
+function synthAcidBass(ctx: AudioContext, when: number, midi: number, filterFreq: number, decay: number, atk: number, vol: number, dest: AudioNode) {
   const freq = 440 * Math.pow(2, (midi - 69) / 12);
   const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq;
   const f = ctx.createBiquadFilter();
   f.type = 'lowpass';
   f.frequency.setValueAtTime(filterFreq * 8, when);
   f.frequency.exponentialRampToValueAtTime(filterFreq * 0.4, when + decay * 0.6);
-  f.Q.value = 18; // high resonance = 303 squeal
-  const e = ctx.createGain(); e.gain.setValueAtTime(vol, when); e.gain.exponentialRampToValueAtTime(0.001, when + decay);
+  f.Q.value = 18;
+  const e = ctx.createGain();
+  e.gain.setValueAtTime(0, when);
+  e.gain.linearRampToValueAtTime(vol, when + atk);
+  e.gain.exponentialRampToValueAtTime(0.001, when + atk + decay);
   o.connect(f); f.connect(e); e.connect(dest);
-  o.start(when); o.stop(when + decay + 0.05);
+  o.start(when); o.stop(when + atk + decay + 0.05);
 }
 
-function synthReeseBass(ctx: AudioContext, when: number, midi: number, decay: number, vol: number, dest: AudioNode) {
+function synthReeseBass(ctx: AudioContext, when: number, midi: number, decay: number, atk: number, vol: number, dest: AudioNode) {
   const freq = 440 * Math.pow(2, (midi - 69) / 12);
   const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500; f.Q.value = 2;
-  const e = ctx.createGain(); e.gain.setValueAtTime(vol, when); e.gain.exponentialRampToValueAtTime(0.001, when + decay);
+  const e = ctx.createGain();
+  e.gain.setValueAtTime(0, when);
+  e.gain.linearRampToValueAtTime(vol, when + atk);
+  e.gain.exponentialRampToValueAtTime(0.001, when + atk + decay);
   [0, 0.007].forEach(detune => {
     const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq * (1 + detune);
-    o.connect(f); o.start(when); o.stop(when + decay + 0.05);
+    o.connect(f); o.start(when); o.stop(when + atk + decay + 0.05);
   });
   f.connect(e); e.connect(dest);
 }
 
-// LEAD variants
-function synthSuperSaw(ctx: AudioContext, when: number, midi: number, filterFreq: number, filterQ: number, decay: number, vol: number, dest: AudioNode) {
+// LEAD
+function synthSuperSaw(ctx: AudioContext, when: number, midi: number, filterFreq: number, filterQ: number, decay: number, atk: number, vol: number, dest: AudioNode) {
   const base = 440 * Math.pow(2, (midi - 69) / 12);
   const detunes = [-0.025, -0.012, 0, 0.012, 0.025];
   const mix = ctx.createGain(); mix.gain.value = vol / detunes.length;
   detunes.forEach(d => {
     const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = base * Math.pow(2, d);
-    o.connect(mix); o.start(when); o.stop(when + decay + 0.05);
+    o.connect(mix); o.start(when); o.stop(when + atk + decay + 0.05);
   });
   const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(filterFreq * 4, when); f.frequency.exponentialRampToValueAtTime(filterFreq, when + decay * 0.3); f.Q.value = filterQ;
-  const e = ctx.createGain(); e.gain.setValueAtTime(vol, when); e.gain.exponentialRampToValueAtTime(0.001, when + decay);
+  const e = ctx.createGain();
+  e.gain.setValueAtTime(0, when);
+  e.gain.linearRampToValueAtTime(vol, when + atk);
+  e.gain.exponentialRampToValueAtTime(0.001, when + atk + decay);
   mix.connect(f); f.connect(e); e.connect(dest);
 }
 
-function synthSquareLead(ctx: AudioContext, when: number, midi: number, filterFreq: number, filterQ: number, decay: number, vol: number, dest: AudioNode) {
+function synthSquareLead(ctx: AudioContext, when: number, midi: number, filterFreq: number, filterQ: number, decay: number, atk: number, vol: number, dest: AudioNode) {
   const freq = 440 * Math.pow(2, (midi - 69) / 12);
   const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = freq;
   const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(filterFreq * 3, when); f.frequency.exponentialRampToValueAtTime(filterFreq, when + decay * 0.1); f.Q.value = filterQ;
-  const e = ctx.createGain(); e.gain.setValueAtTime(vol * 0.65, when); e.gain.exponentialRampToValueAtTime(0.001, when + decay);
-  o.connect(f); f.connect(e); e.connect(dest); o.start(when); o.stop(when + decay + 0.05);
+  const e = ctx.createGain();
+  e.gain.setValueAtTime(0, when);
+  e.gain.linearRampToValueAtTime(vol * 0.65, when + atk);
+  e.gain.exponentialRampToValueAtTime(0.001, when + atk + decay);
+  o.connect(f); f.connect(e); e.connect(dest); o.start(when); o.stop(when + atk + decay + 0.05);
 }
 
 function synthPluck(ctx: AudioContext, when: number, midi: number, decay: number, vol: number, dest: AudioNode) {
@@ -284,57 +321,77 @@ function synthPluck(ctx: AudioContext, when: number, midi: number, decay: number
   src.connect(f); f.connect(e); e.connect(dest); src.start(when); src.stop(when + decay * 2 + 0.05);
 }
 
-// CHORD variants
-function synthChordCommon(ctx: AudioContext, when: number, midi: number, semis: number[], filterFreq: number, decay: number, vol: number, dest: AudioNode) {
+// CHORD
+function synthChordCommon(ctx: AudioContext, when: number, midi: number, semis: number[], filterFreq: number, decay: number, atk: number, vol: number, dest: AudioNode) {
   semis.forEach((s, i) => {
     const freq = 440 * Math.pow(2, (midi + s - 69) / 12) * (1 + (i - 1) * 0.003);
     const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = freq;
     const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filterFreq; f.Q.value = 1;
-    const e = ctx.createGain(); e.gain.setValueAtTime(vol / semis.length, when); e.gain.exponentialRampToValueAtTime(0.001, when + decay);
-    o.connect(f); f.connect(e); e.connect(dest); o.start(when); o.stop(when + decay + 0.05);
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(0, when);
+    e.gain.linearRampToValueAtTime(vol / semis.length, when + atk);
+    e.gain.exponentialRampToValueAtTime(0.001, when + atk + decay);
+    o.connect(f); f.connect(e); e.connect(dest); o.start(when); o.stop(when + atk + decay + 0.05);
   });
 }
 
-function synthPadChord(ctx: AudioContext, when: number, midi: number, filterFreq: number, decay: number, vol: number, dest: AudioNode) {
-  // Slow attack pad
+function synthPadChord(ctx: AudioContext, when: number, midi: number, filterFreq: number, decay: number, atk: number, vol: number, dest: AudioNode) {
   [0, 4, 7, 11].forEach((s, i) => {
     const freq = 440 * Math.pow(2, (midi + s - 69) / 12) * (1 + (i - 2) * 0.004);
     const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
     const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filterFreq; f.Q.value = 1;
     const e = ctx.createGain();
+    const realAtk = Math.max(atk, 0.08);
     e.gain.setValueAtTime(0, when);
-    e.gain.linearRampToValueAtTime(vol / 4, when + decay * 0.25); // slow attack
-    e.gain.linearRampToValueAtTime(vol / 4, when + decay * 0.75);
-    e.gain.exponentialRampToValueAtTime(0.001, when + decay * 1.5);
-    o.connect(f); f.connect(e); e.connect(dest); o.start(when); o.stop(when + decay * 1.5 + 0.05);
+    e.gain.linearRampToValueAtTime(vol / 4, when + realAtk);
+    e.gain.linearRampToValueAtTime(vol / 4, when + realAtk + decay * 0.5);
+    e.gain.exponentialRampToValueAtTime(0.001, when + realAtk + decay * 1.5);
+    o.connect(f); f.connect(e); e.connect(dest); o.start(when); o.stop(when + realAtk + decay * 1.5 + 0.05);
   });
 }
 
-// FX variants
-function synthFM(ctx: AudioContext, when: number, midi: number, decay: number, vol: number, dest: AudioNode) {
+// FX
+function synthFM(ctx: AudioContext, when: number, midi: number, decay: number, atk: number, vol: number, dest: AudioNode) {
   const cf = 440 * Math.pow(2, (midi - 69) / 12);
   const carrier = ctx.createOscillator(), mod = ctx.createOscillator(), mg = ctx.createGain();
   carrier.type = 'sine'; carrier.frequency.value = cf;
   mod.type = 'sine'; mod.frequency.value = cf * 2.73;
   mg.gain.setValueAtTime(cf * 4, when); mg.gain.exponentialRampToValueAtTime(cf * 0.2, when + decay * 0.4);
   mod.connect(mg); mg.connect(carrier.frequency);
-  const e = ctx.createGain(); e.gain.setValueAtTime(vol * 0.45, when); e.gain.exponentialRampToValueAtTime(0.001, when + decay);
-  carrier.connect(e); e.connect(dest); mod.start(when); carrier.start(when); mod.stop(when + decay + 0.05); carrier.stop(when + decay + 0.05);
+  const e = ctx.createGain();
+  e.gain.setValueAtTime(0, when);
+  e.gain.linearRampToValueAtTime(vol * 0.45, when + atk);
+  e.gain.exponentialRampToValueAtTime(0.001, when + atk + decay);
+  carrier.connect(e); e.connect(dest); mod.start(when); carrier.start(when); mod.stop(when + atk + decay + 0.05); carrier.stop(when + atk + decay + 0.05);
 }
 
-function synthAM(ctx: AudioContext, when: number, midi: number, decay: number, vol: number, dest: AudioNode) {
+function synthAM(ctx: AudioContext, when: number, midi: number, decay: number, atk: number, vol: number, dest: AudioNode) {
   const cf = 440 * Math.pow(2, (midi - 69) / 12);
   const carrier = ctx.createOscillator(), mod = ctx.createOscillator();
   carrier.type = 'sawtooth'; carrier.frequency.value = cf;
   mod.type = 'sine'; mod.frequency.value = cf * 1.41;
   const mg = ctx.createGain(); mg.gain.value = cf * 1.5;
-  mod.connect(mg); mg.connect(carrier.frequency); // FM-ish AM
-  const e = ctx.createGain(); e.gain.setValueAtTime(vol * 0.4, when); e.gain.exponentialRampToValueAtTime(0.001, when + decay);
-  carrier.connect(e); e.connect(dest); mod.start(when); carrier.start(when); mod.stop(when + decay + 0.05); carrier.stop(when + decay + 0.05);
+  mod.connect(mg); mg.connect(carrier.frequency);
+  const e = ctx.createGain();
+  e.gain.setValueAtTime(0, when);
+  e.gain.linearRampToValueAtTime(vol * 0.4, when + atk);
+  e.gain.exponentialRampToValueAtTime(0.001, when + atk + decay);
+  carrier.connect(e); e.connect(dest); mod.start(when); carrier.start(when); mod.stop(when + atk + decay + 0.05); carrier.stop(when + atk + decay + 0.05);
 }
 
-function synthNoiseFX(ctx: AudioContext, when: number, filterFreq: number, decay: number, vol: number, dest: AudioNode) {
-  synthNoise(ctx, when, filterFreq, 8, 'bandpass', decay, vol * 0.4, dest);
+function synthNoiseFX(ctx: AudioContext, when: number, filterFreq: number, decay: number, atk: number, vol: number, dest: AudioNode) {
+  const len = Math.ceil(ctx.sampleRate * (atk + decay + 0.05));
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = filterFreq; f.Q.value = 8;
+  const e = ctx.createGain();
+  e.gain.setValueAtTime(0, when);
+  e.gain.linearRampToValueAtTime(vol * 0.4, when + atk);
+  e.gain.exponentialRampToValueAtTime(0.001, when + atk + decay);
+  src.connect(f); f.connect(e); e.connect(dest);
+  src.start(when); src.stop(when + atk + decay + 0.05);
 }
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
@@ -348,12 +405,19 @@ type A =
   | { t: 'INC_LOOP' }
   | { t: 'SET_SCALE'; key?: number; mode?: ScaleMode }
   | { t: 'SET_WEBCAM'; active?: boolean; filter?: number; reverb?: number; delay?: number }
+  | { t: 'SET_GLOBAL_FX'; reverb?: number; delay?: number }
   | { t: 'TOGGLE_STEP'; ti: number; si: number }
   | { t: 'UPDATE_STEP'; ti: number; si: number; p: Partial<NStep> }
   | { t: 'UPDATE_TRACK'; ti: number; p: Partial<NTrack> }
   | { t: 'RANDOMIZE_TRACK'; ti: number; density: number }
   | { t: 'CLEAR_TRACK'; ti: number }
+  | { t: 'SWITCH_PATTERN'; idx: number }
+  | { t: 'COPY_PATTERN'; from: number; to: number }
   | { t: 'STOP' };
+
+function syncSlots(tracks: NTrack[], slots: NStep[][][], pi: number): NStep[][][] {
+  return slots.map((slot, i) => i === pi ? tracks.map(t => t.steps) : slot);
+}
 
 function reducer(state: NEngineState, a: A): NEngineState {
   switch (a.t) {
@@ -370,39 +434,64 @@ function reducer(state: NEngineState, a: A): NEngineState {
       webcamReverb: a.reverb  ?? state.webcamReverb,
       webcamDelay:  a.delay   ?? state.webcamDelay,
     };
-    case 'TOGGLE_STEP': return {
-      ...state, tracks: state.tracks.map((t, ti) => ti !== a.ti ? t : {
-        ...t, steps: t.steps.map((s, si) => si !== a.si ? s : { ...s, active: !s.active })
-      })
+    case 'SET_GLOBAL_FX': return { ...state,
+      globalReverb: a.reverb ?? state.globalReverb,
+      globalDelay:  a.delay  ?? state.globalDelay,
     };
-    case 'UPDATE_STEP': return {
-      ...state, tracks: state.tracks.map((t, ti) => ti !== a.ti ? t : {
+
+    case 'TOGGLE_STEP': {
+      const newTracks = state.tracks.map((t, ti) => ti !== a.ti ? t : {
+        ...t, steps: t.steps.map((s, si) => si !== a.si ? s : { ...s, active: !s.active })
+      });
+      return { ...state, tracks: newTracks, patternSlots: syncSlots(newTracks, state.patternSlots, state.currentPattern) };
+    }
+    case 'UPDATE_STEP': {
+      const newTracks = state.tracks.map((t, ti) => ti !== a.ti ? t : {
         ...t, steps: t.steps.map((s, si) => {
           if (si !== a.si) return s;
           const n = { ...s, ...a.p };
           n.locked = n.pitchOffset !== 0 || n.filterMod !== 0 || n.decayMod !== 0;
           return n;
         })
-      })
-    };
+      });
+      return { ...state, tracks: newTracks, patternSlots: syncSlots(newTracks, state.patternSlots, state.currentPattern) };
+    }
     case 'UPDATE_TRACK': return {
       ...state, tracks: state.tracks.map((t, ti) => ti !== a.ti ? t : { ...t, ...a.p })
     };
-    case 'RANDOMIZE_TRACK': return {
-      ...state, tracks: state.tracks.map((t, ti) => ti !== a.ti ? t : {
+    case 'RANDOMIZE_TRACK': {
+      const newTracks = state.tracks.map((t, ti) => ti !== a.ti ? t : {
         ...t, steps: t.steps.map(s => ({
           ...s,
           active: Math.random() < a.density,
           probability: Math.floor(Math.random() * 30 + 70),
           condition: (['always', 'always', 'always', '1:2', '1:4'] as const)[Math.floor(Math.random() * 5)],
         }))
-      })
-    };
-    case 'CLEAR_TRACK': return {
-      ...state, tracks: state.tracks.map((t, ti) => ti !== a.ti ? t : {
+      });
+      return { ...state, tracks: newTracks, patternSlots: syncSlots(newTracks, state.patternSlots, state.currentPattern) };
+    }
+    case 'CLEAR_TRACK': {
+      const newTracks = state.tracks.map((t, ti) => ti !== a.ti ? t : {
         ...t, steps: t.steps.map(s => ({ ...s, active: false, locked: false, pitchOffset: 0, filterMod: 0, decayMod: 0, probability: 100, condition: 'always' as const }))
-      })
-    };
+      });
+      return { ...state, tracks: newTracks, patternSlots: syncSlots(newTracks, state.patternSlots, state.currentPattern) };
+    }
+
+    case 'SWITCH_PATTERN': {
+      const newSlots = syncSlots(state.tracks, state.patternSlots, state.currentPattern);
+      const newTracks = state.tracks.map((t, ti) => ({
+        ...t, steps: newSlots[a.idx][ti],
+      }));
+      return { ...state, currentPattern: a.idx, patternSlots: newSlots, tracks: newTracks };
+    }
+    case 'COPY_PATTERN': {
+      const src = state.patternSlots[a.from];
+      const newSlots = state.patternSlots.map((slot, pi) =>
+        pi === a.to ? src.map(trackSteps => trackSteps.map(s => ({ ...s }))) : slot
+      );
+      return { ...state, patternSlots: newSlots };
+    }
+
     case 'STOP': return { ...state, playing: false, currentStep: -1, loopCount: 0 };
     default: return state;
   }
@@ -416,6 +505,9 @@ function initState(): NEngineState {
     fillActive: false, loopCount: 0,
     scaleKey: 9, scaleMode: 'phrygian',
     webcamActive: false, webcamFilter: 0, webcamReverb: 0, webcamDelay: 0,
+    globalReverb: 0.25, globalDelay: 0.15,
+    currentPattern: 0,
+    patternSlots: defaultPatternSlots(),
     tracks: defaultNTracks(),
   };
 }
@@ -423,25 +515,65 @@ function initState(): NEngineState {
 export function useNeuralEngine() {
   const [state, dispatch] = useReducer(reducer, null, initState);
 
-  const ctxRef      = useRef<AudioContext | null>(null);
-  const scRef       = useRef<GainNode | null>(null);
-  const timerRef    = useRef<number | null>(null);
-  const nextTimeRef = useRef(0);
-  const stepRef     = useRef(-1);
-  const loopRef     = useRef(-1);
-  const playingRef  = useRef(false);
-  const stateRef    = useRef(state);
-  stateRef.current  = state;
+  const ctxRef       = useRef<AudioContext | null>(null);
+  const scRef        = useRef<GainNode | null>(null);
+  const reverbBusRef = useRef<GainNode | null>(null);
+  const delayBusRef  = useRef<GainNode | null>(null);
+  const delayNodeRef = useRef<DelayNode | null>(null);
+  const timerRef     = useRef<number | null>(null);
+  const nextTimeRef  = useRef(0);
+  const stepRef      = useRef(-1);
+  const loopRef      = useRef(-1);
+  const playingRef   = useRef(false);
+  const stateRef     = useRef(state);
+  stateRef.current   = state;
 
   const getCtx = useCallback((): AudioContext => {
     if (!ctxRef.current) {
-      ctxRef.current = new AudioContext();
-      const sc = ctxRef.current.createGain(); sc.gain.value = 1; sc.connect(ctxRef.current.destination);
+      const ctx = new AudioContext();
+      ctxRef.current = ctx;
+
+      // Main synth bus (sidechain pump target)
+      const sc = ctx.createGain(); sc.gain.value = 1; sc.connect(ctx.destination);
       scRef.current = sc;
+
+      // Reverb bus
+      const reverbIn = ctx.createGain(); reverbIn.gain.value = 0;
+      const conv = ctx.createConvolver(); conv.buffer = createReverbIR(ctx, 1.8);
+      const reverbOut = ctx.createGain(); reverbOut.gain.value = 0.7;
+      reverbIn.connect(conv); conv.connect(reverbOut); reverbOut.connect(ctx.destination);
+      sc.connect(reverbIn);
+      reverbBusRef.current = reverbIn;
+
+      // Delay bus (dotted 8th at 128 BPM = 0.352s)
+      const delayIn = ctx.createGain(); delayIn.gain.value = 0;
+      const delayNode = ctx.createDelay(2.0); delayNode.delayTime.value = 0.352;
+      const delayFB = ctx.createGain(); delayFB.gain.value = 0.38;
+      const delayLPF = ctx.createBiquadFilter(); delayLPF.type = 'lowpass'; delayLPF.frequency.value = 4000;
+      delayIn.connect(delayNode); delayNode.connect(delayLPF); delayLPF.connect(delayFB);
+      delayFB.connect(delayNode); delayNode.connect(ctx.destination);
+      sc.connect(delayIn);
+      delayBusRef.current = delayIn;
+      delayNodeRef.current = delayNode;
     }
     if (ctxRef.current.state === 'suspended') ctxRef.current.resume();
     return ctxRef.current;
   }, []);
+
+  // Sync effect bus levels when globals change
+  useEffect(() => {
+    if (!reverbBusRef.current || !delayBusRef.current) return;
+    const rv = Math.min(1, state.globalReverb + state.webcamReverb * 0.5);
+    const dl = Math.min(1, state.globalDelay  + state.webcamDelay  * 0.5);
+    reverbBusRef.current.gain.setTargetAtTime(rv * 0.35, ctxRef.current!.currentTime, 0.05);
+    delayBusRef.current.gain.setTargetAtTime(dl * 0.28,  ctxRef.current!.currentTime, 0.05);
+  }, [state.globalReverb, state.globalDelay, state.webcamReverb, state.webcamDelay]);
+
+  // Update delay time when BPM changes
+  useEffect(() => {
+    if (!delayNodeRef.current || !ctxRef.current) return;
+    delayNodeRef.current.delayTime.setTargetAtTime(60 / state.bpm * 0.75, ctxRef.current.currentTime, 0.1);
+  }, [state.bpm]);
 
   const fireStep = useCallback((step: number, when: number) => {
     const s   = stateRef.current;
@@ -460,7 +592,8 @@ export function useNeuralEngine() {
       const ef = track.filterFreq * Math.pow(2, sd.locked ? sd.filterMod : 0) * (1 + s.webcamFilter * 3);
       const ed = track.decay  * Math.pow(2, sd.locked ? sd.decayMod  : 0);
       const vol = track.volume;
-      const st = track.synthType;
+      const st  = track.synthType;
+      const atk = track.attack;
 
       switch (track.role) {
         case 'kick':
@@ -496,17 +629,17 @@ export function useNeuralEngine() {
 
         case 'bass': {
           const note = quantize(track.rootNote + (sd.locked ? sd.pitchOffset : 0), s.scaleKey, s.scaleMode);
-          if      (st === 'saw')   synthSawBass(ctx, when, note, ef, track.filterRes, ed, vol * 0.8, sc);
-          else if (st === 'acid')  synthAcidBass(ctx, when, note, ef, ed, vol * 0.8, sc);
-          else                     synthReeseBass(ctx, when, note, ed, vol * 0.8, sc);
+          if      (st === 'saw')   synthSawBass(ctx, when, note, ef, track.filterRes, ed, atk, vol * 0.8, sc);
+          else if (st === 'acid')  synthAcidBass(ctx, when, note, ef, ed, atk, vol * 0.8, sc);
+          else                     synthReeseBass(ctx, when, note, ed, atk, vol * 0.8, sc);
           window.dispatchEvent(new CustomEvent('audiobabe:note', { detail: { midiNote: note, velocity: vol, duration: ed } }));
           break;
         }
 
         case 'lead': {
           const note = quantize(track.rootNote + (sd.locked ? sd.pitchOffset : 0), s.scaleKey, s.scaleMode);
-          if      (st === 'supersaw') synthSuperSaw(ctx, when, note, ef, track.filterRes, ed, vol * 0.65, sc);
-          else if (st === 'square')   synthSquareLead(ctx, when, note, ef, track.filterRes, ed, vol * 0.6, sc);
+          if      (st === 'supersaw') synthSuperSaw(ctx, when, note, ef, track.filterRes, ed, atk, vol * 0.65, sc);
+          else if (st === 'square')   synthSquareLead(ctx, when, note, ef, track.filterRes, ed, atk, vol * 0.6, sc);
           else                        synthPluck(ctx, when, note, ed, vol * 0.7, sc);
           window.dispatchEvent(new CustomEvent('audiobabe:note', { detail: { midiNote: note, velocity: vol, duration: ed } }));
           break;
@@ -514,18 +647,18 @@ export function useNeuralEngine() {
 
         case 'chord': {
           const note = quantize(track.rootNote + (sd.locked ? sd.pitchOffset : 0), s.scaleKey, s.scaleMode);
-          if      (st === 'minor') synthChordCommon(ctx, when, note, [0,3,7], ef, ed, vol * 0.5, sc);
-          else if (st === 'major') synthChordCommon(ctx, when, note, [0,4,7], ef, ed, vol * 0.5, sc);
-          else                     synthPadChord(ctx, when, note, ef, ed, vol * 0.45, sc);
+          if      (st === 'minor') synthChordCommon(ctx, when, note, [0,3,7], ef, ed, atk, vol * 0.5, sc);
+          else if (st === 'major') synthChordCommon(ctx, when, note, [0,4,7], ef, ed, atk, vol * 0.5, sc);
+          else                     synthPadChord(ctx, when, note, ef, ed, atk, vol * 0.45, sc);
           window.dispatchEvent(new CustomEvent('audiobabe:note', { detail: { midiNote: note, velocity: vol, duration: ed } }));
           break;
         }
 
         case 'fx': {
           const note = quantize(track.rootNote + (sd.locked ? sd.pitchOffset : 0), s.scaleKey, s.scaleMode);
-          if      (st === 'fm')    synthFM(ctx, when, note, ed, vol * 0.4, sc);
-          else if (st === 'am')    synthAM(ctx, when, note, ed, vol * 0.4, sc);
-          else                     synthNoiseFX(ctx, when, ef, ed, vol * 0.4, sc);
+          if      (st === 'fm')    synthFM(ctx, when, note, ed, atk, vol * 0.4, sc);
+          else if (st === 'am')    synthAM(ctx, when, note, ed, atk, vol * 0.4, sc);
+          else                     synthNoiseFX(ctx, when, ef, ed, atk, vol * 0.4, sc);
           window.dispatchEvent(new CustomEvent('audiobabe:note', { detail: { midiNote: note, velocity: vol, duration: ed } }));
           break;
         }
@@ -555,12 +688,15 @@ export function useNeuralEngine() {
 
   const start = useCallback(() => {
     const ctx = getCtx();
+    // Force initialize effect levels
+    if (reverbBusRef.current) reverbBusRef.current.gain.value = state.globalReverb * 0.35;
+    if (delayBusRef.current)  delayBusRef.current.gain.value  = state.globalDelay  * 0.28;
     playingRef.current = true;
     stepRef.current = -1; loopRef.current = -1;
     nextTimeRef.current = ctx.currentTime + 0.05;
     dispatch({ t: 'SET_PLAYING', v: true });
     timerRef.current = window.setInterval(tick, 25);
-  }, [getCtx, tick]);
+  }, [getCtx, tick, state.globalReverb, state.globalDelay]);
 
   const stop = useCallback(() => {
     playingRef.current = false;
@@ -574,17 +710,20 @@ export function useNeuralEngine() {
     ctxRef.current?.close();
   }, []);
 
-  const toggleStep    = useCallback((ti: number, si: number) => dispatch({ t: 'TOGGLE_STEP', ti, si }), []);
-  const updateStep    = useCallback((ti: number, si: number, p: Partial<NStep>) => dispatch({ t: 'UPDATE_STEP', ti, si, p }), []);
-  const updateTrack   = useCallback((ti: number, p: Partial<NTrack>) => dispatch({ t: 'UPDATE_TRACK', ti, p }), []);
-  const randomize     = useCallback((ti: number, density = 0.35) => dispatch({ t: 'RANDOMIZE_TRACK', ti, density }), []);
-  const clearTrack    = useCallback((ti: number) => dispatch({ t: 'CLEAR_TRACK', ti }), []);
+  const toggleStep     = useCallback((ti: number, si: number) => dispatch({ t: 'TOGGLE_STEP', ti, si }), []);
+  const updateStep     = useCallback((ti: number, si: number, p: Partial<NStep>) => dispatch({ t: 'UPDATE_STEP', ti, si, p }), []);
+  const updateTrack    = useCallback((ti: number, p: Partial<NTrack>) => dispatch({ t: 'UPDATE_TRACK', ti, p }), []);
+  const randomize      = useCallback((ti: number, density = 0.35) => dispatch({ t: 'RANDOMIZE_TRACK', ti, density }), []);
+  const clearTrack     = useCallback((ti: number) => dispatch({ t: 'CLEAR_TRACK', ti }), []);
+  const switchPattern  = useCallback((idx: number) => dispatch({ t: 'SWITCH_PATTERN', idx }), []);
+  const copyPattern    = useCallback((from: number, to: number) => dispatch({ t: 'COPY_PATTERN', from, to }), []);
+  const setGlobalFX    = useCallback((reverb?: number, delay?: number) => dispatch({ t: 'SET_GLOBAL_FX', reverb, delay }), []);
 
   const updateMeta = useCallback((p: Partial<Pick<NEngineState,
     'bpm'|'swing'|'fillActive'|'scaleKey'|'scaleMode'|'webcamActive'|'webcamFilter'|'webcamReverb'|'webcamDelay'
   >>) => {
-    if (p.bpm       !== undefined) dispatch({ t: 'SET_BPM',    v: p.bpm });
-    if (p.swing     !== undefined) dispatch({ t: 'SET_SWING',  v: p.swing });
+    if (p.bpm        !== undefined) dispatch({ t: 'SET_BPM',   v: p.bpm });
+    if (p.swing      !== undefined) dispatch({ t: 'SET_SWING', v: p.swing });
     if (p.fillActive !== undefined) dispatch({ t: 'SET_FILL',  v: p.fillActive });
     if (p.scaleKey !== undefined || p.scaleMode !== undefined)
       dispatch({ t: 'SET_SCALE', key: p.scaleKey, mode: p.scaleMode });
@@ -593,5 +732,5 @@ export function useNeuralEngine() {
       dispatch({ t: 'SET_WEBCAM', active: p.webcamActive, filter: p.webcamFilter, reverb: p.webcamReverb, delay: p.webcamDelay });
   }, []);
 
-  return { state, start, stop, toggleStep, updateStep, updateTrack, updateMeta, randomize, clearTrack };
+  return { state, start, stop, toggleStep, updateStep, updateTrack, updateMeta, randomize, clearTrack, switchPattern, copyPattern, setGlobalFX };
 }
